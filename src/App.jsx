@@ -173,35 +173,33 @@ const makeRenderCustomNode = (dims, openProfileModal) => ({ nodeDatum, toggleNod
           const mid = Math.ceil(words.length / 2);
           const line1 = words.slice(0, mid).join(' ');
           const line2 = words.slice(mid).join(' ');
-          const baseY = PHOTO_CY + PHOTO_R + 32;
-          return line2 ? (
+          const baseY = PHOTO_CY + PHOTO_R + (dims.isMobile ? 24 : 32);
+          const nameLines = line2 ? 2 : 1;
+          const descY = baseY + (FONT_NAME + 3) * nameLines + 2;
+          return (
             <>
               <text x={cx} y={baseY} textAnchor="middle" fill="#1F150C" strokeWidth="0"
                 style={{ fontSize: `${FONT_NAME}px`, fontWeight: 700, fontFamily: 'Inter, sans-serif' }}>
                 {line1}
               </text>
-              <text x={cx} y={baseY + FONT_NAME + 3} textAnchor="middle" fill="#1F150C" strokeWidth="0"
-                style={{ fontSize: `${FONT_NAME}px`, fontWeight: 700, fontFamily: 'Inter, sans-serif' }}>
-                {line2}
-              </text>
+              {line2 && (
+                <text x={cx} y={baseY + FONT_NAME + 3} textAnchor="middle" fill="#1F150C" strokeWidth="0"
+                  style={{ fontSize: `${FONT_NAME}px`, fontWeight: 700, fontFamily: 'Inter, sans-serif' }}>
+                  {line2}
+                </text>
+              )}
+              {nodeDatum.attributes?.desc && (
+                <text
+                  x={cx} y={descY}
+                  textAnchor="middle" fill="#412D15" strokeWidth="0"
+                  style={{ fontSize: `${FONT_DESC}px`, fontFamily: 'Inter, sans-serif' }}
+                >
+                  {nodeDatum.attributes.desc}
+                </text>
+              )}
             </>
-          ) : (
-            <text x={cx} y={baseY} textAnchor="middle" fill="#1F150C" strokeWidth="0"
-              style={{ fontSize: `${FONT_NAME}px`, fontWeight: 700, fontFamily: 'Inter, sans-serif' }}>
-              {line1}
-            </text>
           );
         })()}
-
-        {nodeDatum.attributes?.desc && (
-          <text
-            x={cx} y={PHOTO_CY + PHOTO_R + 32 + (FONT_NAME + 3) * 2 + 2}
-            textAnchor="middle" fill="#412D15" strokeWidth="0"
-            style={{ fontSize: `${FONT_DESC}px`, fontFamily: 'Inter, sans-serif' }}
-          >
-            {nodeDatum.attributes.desc}
-          </text>
-        )}
       </g>
 
       {(hasChildren || isCollapsed) && (
@@ -687,7 +685,7 @@ export default function App() {
   const isTablet = !isMobile && width < 1024;
 
   const dims = isMobile
-    ? { CARD_W: 150, CARD_H: 142, CARD_R: 12, PHOTO_R: 30, PHOTO_CY: -26, FONT_NAME: 11, FONT_DESC: 9, FONT_INITIALS: 13, isMobile: true }
+    ? { CARD_W: 150, CARD_H: 150, CARD_R: 12, PHOTO_R: 30, PHOTO_CY: -26, FONT_NAME: 11, FONT_DESC: 9, FONT_INITIALS: 13, isMobile: true }
     : isTablet
     ? { CARD_W: 185, CARD_H: 168, CARD_R: 13, PHOTO_R: 37, PHOTO_CY: -31, FONT_NAME: 13, FONT_DESC: 11, FONT_INITIALS: 15, isMobile: false }
     : { CARD_W: 220, CARD_H: 194, CARD_R: 14, PHOTO_R: 44, PHOTO_CY: -36, FONT_NAME: 15, FONT_DESC: 13, FONT_INITIALS: 17, isMobile: false };
