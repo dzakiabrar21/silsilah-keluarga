@@ -90,6 +90,23 @@ function useWindowSize() {
   return size;
 }
 
+// --- HOOK: Deteksi orientasi ---
+function useOrientation() {
+  const [isLandscape, setIsLandscape] = useState(
+    typeof window !== 'undefined' ? window.innerWidth > window.innerHeight : false
+  );
+  useEffect(() => {
+    const handler = () => setIsLandscape(window.innerWidth > window.innerHeight);
+    window.addEventListener('resize', handler);
+    window.addEventListener('orientationchange', handler);
+    return () => {
+      window.removeEventListener('resize', handler);
+      window.removeEventListener('orientationchange', handler);
+    };
+  }, []);
+  return isLandscape;
+}
+
 // --- CUSTOM NODE (menerima dimensi responsif) ---
 const makeRenderCustomNode = (dims, openProfileModal) => ({ nodeDatum, toggleNode }) => {
   const { CARD_W, CARD_H, CARD_R, PHOTO_R, PHOTO_CY, FONT_NAME, FONT_DESC, FONT_INITIALS } = dims;
@@ -661,9 +678,13 @@ function ProfileModal({ person, onClose, isMobile }) {
 
 // --- APP ---
 export default function App() {
-  const { width } = useWindowSize();
-  const isMobile = width < 640;
-  const isTablet = width >= 640 && width < 1024;
+  const { width, height } = useWindowSize();
+  const isLandscape = useOrientation();
+
+  // Mobile = layar kecil. Landscape mobile = HP diputar horizontal
+  const isMobile = Math.min(width, height) < 640;
+  const isMobileLandscape = isMobile && isLandscape;
+  const isTablet = !isMobile && width < 1024;
 
   const dims = isMobile
     ? { CARD_W: 150, CARD_H: 142, CARD_R: 12, PHOTO_R: 30, PHOTO_CY: -26, FONT_NAME: 11, FONT_DESC: 9, FONT_INITIALS: 13, isMobile: true }
@@ -675,23 +696,40 @@ export default function App() {
   const separation = isMobile ? { siblings: 1.05, nonSiblings: 1.2 } : { siblings: 1.2, nonSiblings: 1.5 };
 
   const [translate, setTranslate] = useState({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState(isMobile ? 0.48 : 1);
+  const [zoom, setZoom] = useState(0.48);
   const [selectedPerson, setSelectedPerson] = useState(null);
   const treeRef = useRef(null);
+
+  // Hitung zoom & translate awal berdasarkan orientasi
+  const getInitialZoom = useCallback(() => {
+    if (!isMobile) return isTablet ? 0.75 : 1;
+    return isMobileLandscape ? 0.55 : 0.48;
+  }, [isMobile, isMobileLandscape, isTablet]);
+
+  const getInitialY = useCallback(() => {
+    if (!isMobile) return 130;
+    return isMobileLandscape ? 70 : 100;
+  }, [isMobile, isMobileLandscape]);
 
   const containerRef = useCallback((el) => {
     if (el) {
       const rect = el.getBoundingClientRect();
-      setTranslate({ x: rect.width / 2, y: isMobile ? 100 : 130 });
-      setZoom(isMobile ? 0.48 : isTablet ? 0.75 : 1);
+      setTranslate({ x: rect.width / 2, y: getInitialY() });
+      setZoom(getInitialZoom());
     }
-  }, [isMobile, isTablet]);
+  }, [getInitialZoom, getInitialY]);
+
+  // Saat orientasi berubah, reset posisi pohon
+  useEffect(() => {
+    setZoom(getInitialZoom());
+    setTranslate({ x: width / 2, y: getInitialY() });
+  }, [isLandscape]);
 
   const handleZoomIn = () => setZoom(z => Math.min(z + (isMobile ? 0.15 : 0.2), 3));
   const handleZoomOut = () => setZoom(z => Math.max(z - (isMobile ? 0.15 : 0.2), 0.1));
   const handleReset = () => {
-    setZoom(isMobile ? 0.48 : isTablet ? 0.75 : 1);
-    setTranslate({ x: width / 2, y: isMobile ? 100 : 130 });
+    setZoom(getInitialZoom());
+    setTranslate({ x: width / 2, y: getInitialY() });
   };
 
   const renderNode = makeRenderCustomNode(dims, setSelectedPerson);
@@ -706,43 +744,87 @@ export default function App() {
         <Aurora colorStops={['#412D15', '#E1DCC9', '#1F150C']} amplitude={0.8} blend={0.45} speed={0.25} />
       </div>
 
-      {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6 }}
-        className="absolute w-full flex justify-center z-10 pointer-events-none"
-        style={{ top: isMobile ? '12px' : '24px' }}
-      >
-        <div
-          className="text-center rounded-xl"
-          style={{
-            background: 'rgba(0,0,0,0.60)',
-            border: '1px solid rgba(65,45,21,0.6)',
-            backdropFilter: 'blur(16px)',
-            padding: isMobile ? '10px 20px' : '16px 40px',
-          }}
-        >
-          <h1
-            className="font-bold"
-            style={{
-              color: '#E1DCC9',
-              fontFamily: '"Inter", sans-serif',
-              letterSpacing: '-0.02em',
-              fontSize: isMobile ? '22px' : isTablet ? '32px' : '40px',
-              marginBottom: '2px',
-            }}
+      {/* ===== HEADER: Pill kecil pojok kiri saat landscape mobile, tengah saat portrait ===== */}
+      <AnimatePresence mode="wait">
+        {isMobileLandscape ? (
+          // Landscape mobile — pill kecil pojok kiri atas
+          <motion.div
+            key="header-landscape"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.3 }}
+            className="absolute z-10 pointer-events-none"
+            style={{ top: 10, left: 12 }}
           >
-            Silsilah Keluarga
-          </h1>
-          <p
-            className="tracking-widest uppercase"
-            style={{ color: 'rgba(225,220,201,0.45)', fontSize: isMobile ? '9px' : '11px' }}
+            <div
+              style={{
+                background: 'rgba(0,0,0,0.65)',
+                border: '1px solid rgba(65,45,21,0.6)',
+                backdropFilter: 'blur(16px)',
+                borderRadius: 99,
+                padding: '6px 14px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+              }}
+            >
+              <div style={{
+                width: 6, height: 6, borderRadius: '50%',
+                background: '#E1DCC9', opacity: 0.6,
+              }} />
+              <span style={{
+                color: '#E1DCC9',
+                fontSize: 12, fontWeight: 700,
+                fontFamily: '"Inter", sans-serif',
+                letterSpacing: '-0.01em',
+              }}>
+                Silsilah Keluarga
+              </span>
+            </div>
+          </motion.div>
+        ) : (
+          // Portrait / desktop — header tengah seperti biasa
+          <motion.div
+            key="header-portrait"
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+            className="absolute w-full flex justify-center z-10 pointer-events-none"
+            style={{ top: isMobile ? '12px' : '24px' }}
           >
-            Keturunan Teungku Haji Glumpang
-          </p>
-        </div>
-      </motion.div>
+            <div
+              className="text-center rounded-xl"
+              style={{
+                background: 'rgba(0,0,0,0.60)',
+                border: '1px solid rgba(65,45,21,0.6)',
+                backdropFilter: 'blur(16px)',
+                padding: isMobile ? '10px 20px' : '16px 40px',
+              }}
+            >
+              <h1
+                className="font-bold"
+                style={{
+                  color: '#E1DCC9',
+                  fontFamily: '"Inter", sans-serif',
+                  letterSpacing: '-0.02em',
+                  fontSize: isMobile ? '22px' : isTablet ? '32px' : '40px',
+                  marginBottom: '2px',
+                }}
+              >
+                Silsilah Keluarga
+              </h1>
+              <p
+                className="tracking-widest uppercase"
+                style={{ color: 'rgba(225,220,201,0.45)', fontSize: isMobile ? '9px' : '11px' }}
+              >
+                Keturunan Teungku Haji Glumpang
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Kanvas Pohon */}
       <div
@@ -775,20 +857,23 @@ export default function App() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.5, duration: 0.4 }}
         className="absolute z-20 flex flex-col gap-2"
-        style={{ bottom: isMobile ? '20px' : '28px', right: isMobile ? '16px' : '24px' }}
+        style={{
+          bottom: isMobileLandscape ? '12px' : isMobile ? '20px' : '28px',
+          right: isMobile ? '12px' : '24px',
+        }}
       >
         {[
-          { icon: <ZoomIn size={isMobile ? 16 : 18} />, action: handleZoomIn, label: 'Zoom In' },
-          { icon: <ZoomOut size={isMobile ? 16 : 18} />, action: handleZoomOut, label: 'Zoom Out' },
-          { icon: <Maximize2 size={isMobile ? 14 : 16} />, action: handleReset, label: 'Reset' },
+          { icon: <ZoomIn size={isMobile ? 15 : 18} />, action: handleZoomIn, label: 'Zoom In' },
+          { icon: <ZoomOut size={isMobile ? 15 : 18} />, action: handleZoomOut, label: 'Zoom Out' },
+          { icon: <Maximize2 size={isMobile ? 13 : 16} />, action: handleReset, label: 'Reset' },
         ].map(({ icon, action, label }) => (
           <button
             key={label}
             onClick={action}
             title={label}
             style={{
-              width: isMobile ? '40px' : '46px',
-              height: isMobile ? '40px' : '46px',
+              width: isMobileLandscape ? '36px' : isMobile ? '40px' : '46px',
+              height: isMobileLandscape ? '36px' : isMobile ? '40px' : '46px',
               background: 'rgba(0,0,0,0.65)',
               border: '1px solid rgba(65,45,21,0.7)',
               backdropFilter: 'blur(12px)',
@@ -809,30 +894,35 @@ export default function App() {
         ))}
       </motion.div>
 
-      {/* Hint drag — hanya mobile */}
-      {isMobile && (
+      {/* Hint rotate — muncul di portrait mobile sebentar */}
+      {isMobile && !isMobileLandscape && (
         <motion.div
+          key="rotate-hint"
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 1, duration: 0.5 }}
+          transition={{ delay: 2.5, duration: 0.5 }}
           className="absolute z-10 pointer-events-none"
           style={{ bottom: '20px', left: '50%', transform: 'translateX(-50%)' }}
         >
           <motion.div
-            animate={{ opacity: [1, 0] }}
-            transition={{ delay: 3, duration: 1.5 }}
+            animate={{ opacity: [0, 1, 1, 0] }}
+            transition={{ delay: 0, duration: 4, times: [0, 0.1, 0.8, 1] }}
             style={{
-              background: 'rgba(0,0,0,0.6)',
+              background: 'rgba(0,0,0,0.65)',
               border: '1px solid rgba(65,45,21,0.5)',
               borderRadius: '99px',
-              padding: '6px 14px',
-              color: 'rgba(225,220,201,0.6)',
+              padding: '7px 16px',
+              color: 'rgba(225,220,201,0.75)',
               fontSize: '11px',
               whiteSpace: 'nowrap',
               backdropFilter: 'blur(8px)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
             }}
           >
-            👆 Geser &amp; cubit untuk zoom
+            <span style={{ fontSize: 15 }}>📱</span>
+            Putar HP untuk tampilan lebih luas
           </motion.div>
         </motion.div>
       )}
